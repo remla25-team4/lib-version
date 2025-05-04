@@ -18,32 +18,22 @@ This library uses [`setuptools_scm`](https://github.com/pypa/setuptools_scm/) to
 
 ## Installation
 
-This library is published to the **GitHub Packages registry** associated with this repository's organization. It is **not** published to the public PyPI.
+This library is intended to be installed directly from its Git tag using `pip`. It is **not** published to any public package registries like PyPI.
 
-To install this library as a dependency in another component (like `app-service`):
+To install a specific version (e.g., `v0.1.1`) as a dependency in another component:
 
-1.  **Configure Pip:** You need to tell `pip` to look in the GitHub Packages registry. Use `--extra-index-url` (recommended if you also use PyPI) or `--index-url`.
+```bash
+pip install git+https://github.com/remla25-team4/lib-version.git@v<tag-name>
+ 
+# Example:
+# pip install git+https://github.com/remla25-team4/lib-version.git@v0.1.1
+# Replace <tag_name> with the desired release tag (e.g., v0.1.1). 
 
-    ```bash
-    # Example using --extra-index-url:
-    pip install \
-      --extra-index-url [https://pypi.pkg.github.com/remla25-team4/](https://pypi.pkg.github.com/remla25-team4/) \
-      remla-lib-version==<version-tag> # e.g., remla-lib-version==0.1.0
+# Or
+# git+https://github.com/remla25-team4/lib-ml.git@v0.1.1
+# You can add this line to the requirements.txt file of your project.
 
-    # Example for requirements.txt:
-    # --extra-index-url [https://pypi.pkg.github.com/remla25-team4/](https://pypi.pkg.github.com/remla25-team4/)
-    # remla-lib-version==0.1.0
-    # other-package-from-pypi
-    ```
-    *(Replace `<version-tag>` with the desired released version number, e.g., `0.1.0`)*
-
-2.  **Alternative: Install directly from Git Tag:**
-    As allowed by the assignment for Python, you can also install directly from a Git tag without using GitHub Packages:
-    ```bash
-    pip install git+[https://github.com/remla25-team4/lib-version.git](https://github.com/remla25-team4/lib-version.git)@<tag_name>
-    # e.g., pip install git+[https://github.com/remla25-team4/lib-version.git@v0.1.0](https://github.com/remla25-team4/lib-version.git@v0.1.0)
-    ```
-    *(Replace `<tag_name>` with the actual tag)*
+```
 
 ## Usage
 
@@ -56,9 +46,6 @@ try:
     # Get the version string provided by the library
     library_version = get_version()
     print(f"Using lib-version: {library_version}")
-
-    # You can now use this version string, e.g., in an info endpoint:
-    # return {"service": "app-service", "version": library_version}
 
 except ImportError:
     print("Error: lib_version is not installed correctly.")
