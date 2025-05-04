@@ -5,6 +5,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lib-version"
+dynamic = ["version"]
 authors = [
     { name="<Yulin Chen>", email="<y.chen-112@student.tudelft.nl>" },
 ]
