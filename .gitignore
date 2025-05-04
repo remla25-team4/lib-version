@@ -1,0 +1,5 @@
+/remla
+/.idea
+/src/lib_version/__pycache__
+
+src/lib_version/_version.py

@@ -1,0 +1,25 @@
+[build-system]
+# Use setuptools_scm to automatically get version from Git tags
+requires = ["setuptools>=61.0", "wheel", "setuptools_scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lib-version"
+authors = [
+    { name="<Yulin Chen>", email="<y.chen-112@student.tudelft.nl>" },
+]
+description = "Library providing application version information, version derived from Git tags."
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[tool.setuptools_scm]
+# automatically write the version to src/lib_version/_version.py on build.
+write_to = "src/lib_version/_version.py"
+
+[tool.setuptools.packages.find]
+where = ["src"]
