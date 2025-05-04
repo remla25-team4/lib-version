@@ -29,48 +29,20 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install build pytest twine wheel setuptools-scm>=6.2
-#          pip install -e .
 
-      - name: Deep Debug setuptools_scm calculation
-        shell: bash # Ensure bash is used for consistent commands
-        run: |
-          echo "-----------------------------------------"
-          echo "DEBUGGING SETUPTOOLS_SCM"
-          echo "Current Directory: $(pwd)"
-          echo "Listing root directory:"
-          ls -la
-          echo "-----------------------------------------"
-          echo "Git Status:"
-          git status
-          echo "-----------------------------------------"
-          echo "Tags pointing at HEAD:"
-          git tag --points-at HEAD
-          echo "-----------------------------------------"
-          echo "Git Describe (tags, long, dirty, always):"
-          # This command is often used by setuptools_scm internally
-          git describe --tags --long --dirty --always
-          echo "-----------------------------------------"
-          echo "Running setuptools_scm with its DEBUG flag:"
-          # Make sure setuptools-scm is installed (should be from previous step)
-          export SETUPTOOLS_SCM_DEBUG=1 # Enable verbose logging for setuptools_scm
-          python -m setuptools_scm # Run the command
-          unset SETUPTOOLS_SCM_DEBUG # Unset the debug flag
-          echo "-----------------------------------------"
-          echo "Listing relevant environment variables:"
-          env | grep -E 'SETUPTOOLS_SCM|GIT|GITHUB|CI' | sort || echo "No relevant env vars found"
-          echo "-----------------------------------------"
-          echo "Finished Deep Debug."
-
-      # Step 4: Run tests
-      - name: Run tests with pytest
-        run: |
-          echo "Skipping tests temporarily to debug build version."
-#          pytest tests/
-
-      # Step 5: Build the package using python -m build
+      # Step 4: Build the package using python -m build
       # setuptools_scm automatically embeds the version from the Git tag
       - name: Build package
         run: python -m build
+
+      # Step 5: Install the built package THEN run tests
+      - name: Install package and Run tests
+        run: |
+         echo "Installing built wheel from dist/..."
+         pip install dist/*.whl
+         
+         echo "Running tests against the installed package..."
+         pytest tests/
 
       # Step 6: Verify the built package version matches the Git tag
       - name: Verify built package version
