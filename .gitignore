@@ -1,5 +1,6 @@
 /remla
 /.idea
 /src/lib_version/__pycache__
+.egg-info/
 
 src/lib_version/_version.py
