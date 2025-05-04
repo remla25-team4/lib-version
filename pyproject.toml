@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 name = "lib-version"
 dynamic = ["version"]
 authors = [
-    { name="<Yulin Chen>", email="<y.chen-112@student.tudelft.nl>" },
+    { name="Yulin Chen", email="y.chen-112@student.tudelft.nl" },
 ]
 description = "Library providing application version information, version derived from Git tags."
 readme = "README.md"
