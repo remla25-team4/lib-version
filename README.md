@@ -20,17 +20,17 @@ This library uses [`setuptools_scm`](https://github.com/pypa/setuptools_scm/) to
 
 This library is intended to be installed directly from its Git tag using `pip`. It is **not** published to any public package registries like PyPI.
 
-To install a specific version (e.g., `v0.1.1`) as a dependency in another component:
+To install a specific version (e.g., `v0.1.0`) as a dependency in another component:
 
 ```bash
 pip install git+https://github.com/remla25-team4/lib-version.git@v<tag-name>
  
 # Example:
-# pip install git+https://github.com/remla25-team4/lib-version.git@v0.1.1
-# Replace <tag_name> with the desired release tag (e.g., v0.1.1). 
+# pip install git+https://github.com/remla25-team4/lib-version.git@v0.1.0
+# Replace <tag_name> with the desired release tag (e.g., v0.1.0). 
 
 # Or
-# git+https://github.com/remla25-team4/lib-ml.git@v0.1.1
+# lib-version @ git+https://github.com/remla25-team4/lib-version.git@v0.1.0 
 # You can add this line to the requirements.txt file of your project.
 
 ```
