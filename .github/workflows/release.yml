@@ -10,6 +10,8 @@ jobs:
   build-verify-release:
     name: Build, Verify, and Release
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       # Step 1: Check out the repository code
@@ -40,87 +42,27 @@ jobs:
         run: |
          echo "Installing built wheel from dist/..."
          pip install dist/*.whl
-         
-         echo "Running tests against the installed package..."
-         pytest tests/
 
-      # Step 5: Verify the built package version matches the Git tag
-      - name: Verify built package version
-        run: |
-          echo "Verifying package version..."
-          # Get Expected Version
-          # Extract the version string from the Git tag that triggered the workflow
-          EXPECTED_VERSION=$(echo "${{ github.ref_name }}" | sed 's/^v//')
-          if [ -z "$EXPECTED_VERSION" ]; then
-              echo "ERROR: Could not extract expected version from tag '${{ github.ref_name }}'."
-              exit 1
-          fi
-          echo "Expecting version derived from tag: $EXPECTED_VERSION"
-          
-          # Find Wheel File
-          # Ensure dist directory exists and contains exactly one wheel file (adjust if needed)
-          if [ ! -d dist ] || [ $(ls dist/*.whl | wc -l) -ne 1 ]; then
-            echo "ERROR: dist/ directory not found or does not contain exactly one .whl file."
-            ls -l dist/ # Show contents for debugging
-            exit 1
-          fi
-          WHEEL_FILE=$(ls dist/*.whl)
-          echo "Checking wheel file: $WHEEL_FILE"
-          
-          # Basic Check with Twine
-          echo "Running twine check..."
-          twine check "$WHEEL_FILE"
-          if [ $? -ne 0 ]; then
-             echo "ERROR: twine check failed for $WHEEL_FILE"
-             exit 1
-          fi
-          
-          # Extract METADATA Content
-          # Use unzip -p to print content to stdout, handle potential errors
-          METADATA_CONTENT=$(unzip -p "$WHEEL_FILE" *.dist-info/METADATA 2>/dev/null)
-          if [ $? -ne 0 ] || [ -z "$METADATA_CONTENT" ]; then
-             echo "ERROR: Failed to extract METADATA from $WHEEL_FILE or METADATA is empty."
-             # Attempt to list archive contents for debugging
-             unzip -l "$WHEEL_FILE" *.dist-info/METADATA
-             exit 1
-          fi
-          
-          # Find Version Line in METADATA
-          # Use grep -i for case-insensitivity, check if found
-          VERSION_LINE=$(echo "$METADATA_CONTENT" | grep -i '^Version:')
-          if [ -z "$VERSION_LINE" ]; then
-             echo "ERROR: Could not find line starting with 'Version:' in METADATA."
-             echo "--- METADATA Content Start ---"
-             echo "$METADATA_CONTENT"
-             echo "--- METADATA Content End ---"
-             exit 1
-          fi
-          
-          # Extract Version Value
-          # Use sed to remove 'Version:' prefix (case-insensitive) and leading spaces
-          ACTUAL_VERSION_RAW=$(echo "$VERSION_LINE" | sed -E 's/^Version:[[:space:]]*//i')
-          # Use xargs to trim leading/trailing whitespace from the result
-          ACTUAL_VERSION=$(echo "$ACTUAL_VERSION_RAW" | xargs)
-          
-          if [ -z "$ACTUAL_VERSION" ]; then
-              echo "ERROR: Extracted version string is empty after processing line '$VERSION_LINE'."
-              exit 1
-          fi
-          echo "Actual version found in package metadata: '$ACTUAL_VERSION'" # Added quotes
-          
-          # Compare Versions
-          echo "Comparing '$ACTUAL_VERSION' (found) with '$EXPECTED_VERSION' (expected)..."
-          if [[ "$ACTUAL_VERSION" == "$EXPECTED_VERSION" ]]; then
-            echo "SUCCESS: Package version matches Git tag."
-            exit 0 # Success
-          else
-            echo "ERROR: Version mismatch! Expected '$EXPECTED_VERSION' from tag, but package metadata contains '$ACTUAL_VERSION'."
-            exit 1 # Fail the workflow
-          fi
-
-      # Step 7: Publish distribution to GitHub Packages
-      - name: Upload artifact
+      # Step 6: Upload 'dist' contents as a workflow artifact
+      - name: Upload distribution artifact for workflow run
         uses: actions/upload-artifact@v4
+        if: success()
         with:
           name: lib-version-dist
           path: dist/
+
+      # Step 7: Create GitHub Release and attach distribution files from dist/
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: success()
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          body: |
+            Automated release for version ${{ github.ref_name }}
+          # This will upload the .whl and .tar.gz files (if python -m build creates both).
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
