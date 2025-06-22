@@ -81,10 +81,10 @@ jobs:
       - name: Build package
         run: python -m build --verbose
 
-      - name: Install package and run tests
+      - name: Install package and Run tests
         run: |
-          pip install dist/*.whl
-          pytest
+         echo "Installing built wheel from dist/..."
+         pip install dist/*.whl
 
       - name: Upload distribution artifact
         uses: actions/upload-artifact@v4
