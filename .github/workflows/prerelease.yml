@@ -44,8 +44,8 @@ jobs:
           BASE=${BASE%%-pre*}
           IFS=. read MAJOR MINOR PATCH <<< "$BASE"
           PATCH=$((PATCH + 1))
-          TS=$(date +%Y%m%d.%H%M%S)
-          PRE="v${MAJOR}.${MINOR}.${PATCH}-pre.${TS}"
+          TS=$(date +%Y%m%d%H%M%S)
+          PREVER="v${MAJOR}.${MINOR}.${PATCH}.dev${TS}"
           echo "PRERELEASE_TAG=$PRE"    >> $GITHUB_ENV
           echo "MAJOR=$MAJOR"           >> $GITHUB_ENV
           echo "MINOR=$MINOR"           >> $GITHUB_ENV
