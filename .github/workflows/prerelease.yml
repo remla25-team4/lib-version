@@ -5,7 +5,7 @@ on:
     branches:
       - main
     tags:
-      - 'v[0-9]+(?:\.[0-9]+){2}*'  
+      - 'v[0-9]+.[0-9]+.[0-9]+*'   # e.g. v1.2.3 or v1.2.3-alpha.1
 
 jobs:
   build-verify-prerelease:
@@ -20,11 +20,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-
       - name: Determine trigger type
         id: trigger
         run: |
@@ -36,37 +31,47 @@ jobs:
 
       - name: Calculate prerelease version
         run: |
-          # 1) pick latest stable tag or the pushed tag
+          # 1) Pick the latest tag (or the just-pushed tag)
           if [ "${{ steps.trigger.outputs.by_tag }}" = "true" ]; then
             LATEST="${{ github.ref_name }}"
           else
             LATEST=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
           fi
 
-          # 2) strip leading "v" and any "-pre" or ".dev"
+          # 2) Strip leading 'v' and then any '-…' or '+…' suffix
           BASE=${LATEST#v}
-          BASE=${BASE%%[-.+]*}
+          BASE=${BASE%%[-+]*}
 
+          # 3) Split into MAJOR, MINOR, PATCH
           IFS=. read MAJOR MINOR PATCH <<<"$BASE"
 
-          # 3) bump patch and add a PEP-440 dev suffix
+          # 4) Bump patch + append .dev<TIMESTAMP>
           PATCH=$((PATCH + 1))
           TS=$(date +%Y%m%d%H%M%S)
           PRERELEASE_TAG="v${MAJOR}.${MINOR}.${PATCH}.dev${TS}"
 
           echo "PRERELEASE_TAG=$PRERELEASE_TAG" >> $GITHUB_ENV
 
-      - name: Tag main commit with prerelease
+      - name: Tag prerelease commit
         run: |
           git config --global user.name  "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
-          # always tag the tip of main
-          git fetch origin main
-          SHA=$(git rev-parse origin/main)
+          # decide which commit to tag
+          if [ "${{ steps.trigger.outputs.by_tag }}" = "true" ]; then
+            SHA="${{ github.sha }}"
+          else
+            git fetch origin main
+            SHA=$(git rev-parse origin/main)
+          fi
 
           git tag "${{ env.PRERELEASE_TAG }}" $SHA
           git push origin "${{ env.PRERELEASE_TAG }}"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
 
       - name: Install build & test dependencies
         run: |
@@ -74,7 +79,7 @@ jobs:
           pip install build pytest twine wheel setuptools-scm>=6.2
 
       - name: Build package
-        run: python -m build
+        run: python -m build --verbose
 
       - name: Install package and run tests
         run: |
