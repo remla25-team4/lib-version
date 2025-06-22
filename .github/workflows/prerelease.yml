@@ -5,29 +5,21 @@ on:
     branches:
       - main
     tags:
-      - 'v[0-9]+(?:\.[0-9]+){2}*'  # e.g. v1.2.3 or v1.2.3-alpha.1
+      - 'v[0-9]+.[0-9]+.[0-9]+*'
 
 jobs:
   build-verify-prerelease:
     name: Build, Verify, and Pre-release
     runs-on: ubuntu-latest
     permissions:
-      contents: write   
+      contents: write
 
     steps:
-      # 1. Check out the repo
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # 2. Set up Python
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-
-      # 3. Determine whether we were triggered by a tag or a branch push
       - name: Determine trigger type
         id: trigger
         run: |
@@ -37,35 +29,35 @@ jobs:
             echo "by_tag=false" >> $GITHUB_OUTPUT
           fi
 
-      # 4. Calculate a PEP 440–compliant prerelease tag
       - name: Calculate prerelease version
         run: |
-          # If by tag, BASE_TAG is the pushed tag; else look up the latest tag
+          # pick the base tag
           if [ "${{ steps.trigger.outputs.by_tag }}" = "true" ]; then
             BASE_TAG="${{ github.ref_name }}"
           else
             BASE_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
           fi
 
-          # Strip leading 'v' and any suffix (e.g. '-alpha', '+meta', '.dev...')
-          VERSION_BASE=${BASE_TAG#v}
-          VERSION_BASE=${VERSION_BASE%%[-+\.]*}
+          # strip leading 'v', then drop any '-' suffix (alpha, pre, rc, etc)
+          BASE=${BASE_TAG#v}
+          BASE=${BASE%%-*}       
 
-          IFS=. read MAJOR MINOR PATCH <<<"$VERSION_BASE"
+          # split into major.minor.patch
+          IFS=. read MAJOR MINOR PATCH <<<"$BASE"
 
-          # Bump patch, append a .dev<TIMESTAMP> suffix
+          # bump patch and append "-pre<TIMESTAMP>"
           PATCH=$((PATCH + 1))
           TS=$(date +%Y%m%d%H%M%S)
-          PRERELEASE_TAG="v${MAJOR}.${MINOR}.${PATCH}.dev${TS}"
+          PRERELEASE_TAG="v${MAJOR}.${MINOR}.${PATCH}-pre${TS}"
 
           echo "PRERELEASE_TAG=$PRERELEASE_TAG" >> $GITHUB_ENV
 
-      # 5. Tag the commit (main HEAD or the tagged commit) with the new prerelease tag
       - name: Tag prerelease commit
         run: |
           git config --global user.name  "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
+          # choose commit: either the tag commit or main HEAD
           if [ "${{ steps.trigger.outputs.by_tag }}" = "true" ]; then
             SHA="${{ github.sha }}"
           else
@@ -76,27 +68,29 @@ jobs:
           git tag "${{ env.PRERELEASE_TAG }}" $SHA
           git push origin "${{ env.PRERELEASE_TAG }}"
 
-      # 6. Install build & test dependencies
-      - name: Install dependencies
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install build & test dependencies
         run: |
           python -m pip install --upgrade pip
           pip install build pytest twine wheel setuptools-scm>=6.2
 
-      # 7. Build the package (setuptools_scm will pick up our tag)
       - name: Build package
         run: python -m build --verbose
 
-      # 8. Install the built wheel (and run tests if present)
       - name: Install package and Run tests
         run: |
           pip install dist/*.whl
-          if pytest --maxfail=1 --disable-warnings --exitfirst --collect-only | grep -q "collected [1-9]"; then
+          if pytest --maxfail=1 --disable-warnings --exitfirst --collect-only \
+             | grep -q "collected [1-9]"; then
             pytest
           else
             echo "No tests found—skipping pytest."
           fi
 
-      # 9. Upload 'dist/' as a workflow artifact
       - name: Upload distribution artifact
         uses: actions/upload-artifact@v4
         if: success()
@@ -104,7 +98,6 @@ jobs:
           name: lib-version-dist
           path: dist/
 
-      # 10. Create the GitHub prerelease
       - name: Create GitHub Pre-release
         uses: softprops/action-gh-release@v2
         with:
