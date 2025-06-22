@@ -5,14 +5,14 @@ on:
     branches:
       - main
     tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+*' 
+      - 'v[0-9]+(?:\.[0-9]+){2}*'  
 
 jobs:
   build-verify-prerelease:
     name: Build, Verify, and Pre-release
     runs-on: ubuntu-latest
     permissions:
-      contents: write  
+      contents: write    # for pushing tags & creating the release
 
     steps:
       - name: Checkout code
@@ -20,54 +20,53 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Determine trigger type
-        id: trigger
-        run: |
-          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            echo "triggered_by=tag" >> $GITHUB_OUTPUT
-          else
-            echo "triggered_by=branch" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Get latest stable tag
-        run: |
-          if [[ "${{ steps.trigger.outputs.triggered_by }}" == "branch" ]]; then
-            LATEST=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
-          else
-            LATEST="${{ github.ref_name }}"
-          fi
-          echo "LATEST_TAG=$LATEST" >> $GITHUB_ENV
-
-      - name: Calculate prerelease version
-        run: |
-          BASE=${LATEST_TAG#v}
-          BASE=${BASE%%-pre*}
-          IFS=. read MAJOR MINOR PATCH <<< "$BASE"
-          PATCH=$((PATCH + 1))
-          TS=$(date +%Y%m%d%H%M%S)
-          PREVER="v${MAJOR}.${MINOR}.${PATCH}.dev${TS}"
-          echo "PRERELEASE_TAG=$PRE"    >> $GITHUB_ENV
-          echo "MAJOR=$MAJOR"           >> $GITHUB_ENV
-          echo "MINOR=$MINOR"           >> $GITHUB_ENV
-          echo "PATCH=$PATCH"           >> $GITHUB_ENV
-
-      - name: Tag prerelease commit
-        run: |
-          git config --global user.name  "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git fetch origin main
-          if [[ "${{ steps.trigger.outputs.triggered_by }}" == "branch" ]]; then
-            SHA=$(git rev-parse origin/main)
-          else
-            SHA="${{ github.sha }}"
-          fi
-          git tag "${{ env.PRERELEASE_TAG }}" $SHA
-          git push origin "${{ env.PRERELEASE_TAG }}"
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.13'
+
+      - name: Determine trigger type
+        id: trigger
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            echo "by_tag=true"  >> $GITHUB_OUTPUT
+          else
+            echo "by_tag=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Calculate prerelease version
+        run: |
+          # 1) pick latest stable tag or the pushed tag
+          if [ "${{ steps.trigger.outputs.by_tag }}" = "true" ]; then
+            LATEST="${{ github.ref_name }}"
+          else
+            LATEST=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          fi
+
+          # 2) strip leading "v" and any "-pre" or ".dev"
+          BASE=${LATEST#v}
+          BASE=${BASE%%[-.+]*}
+
+          IFS=. read MAJOR MINOR PATCH <<<"$BASE"
+
+          # 3) bump patch and add a PEP-440 dev suffix
+          PATCH=$((PATCH + 1))
+          TS=$(date +%Y%m%d%H%M%S)
+          PRERELEASE_TAG="v${MAJOR}.${MINOR}.${PATCH}.dev${TS}"
+
+          echo "PRERELEASE_TAG=$PRERELEASE_TAG" >> $GITHUB_ENV
+
+      - name: Tag main commit with prerelease
+        run: |
+          git config --global user.name  "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          # always tag the tip of main
+          git fetch origin main
+          SHA=$(git rev-parse origin/main)
+
+          git tag "${{ env.PRERELEASE_TAG }}" $SHA
+          git push origin "${{ env.PRERELEASE_TAG }}"
 
       - name: Install build & test dependencies
         run: |
@@ -94,6 +93,7 @@ jobs:
         with:
           tag_name: ${{ env.PRERELEASE_TAG }}
           name: Pre-release ${{ env.PRERELEASE_TAG }}
+          draft: false
           prerelease: true
           files: |
             dist/*.whl
