@@ -1,113 +1,89 @@
-name: Verify and Pre-release lib-version
+name: Create lib-version Pre-release
 
 on:
   push:
-    branches:
-      - main
     tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+*'
-
+      - 'v[0-9]+.[0-9]+.[0-9]+'
 
 jobs:
-  build-verify-prerelease:
-    name: Build, Verify, and Pre-release
+  calculate-and-tag:
+    name: Calculate & Tag Pre-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.calculate_version.outputs.version }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Calculate pre-release version
+        id: calculate_version
+        run: |
+          BASE_TAG=${{ github.ref_name }}
+          echo "Triggered by stable tag: $BASE_TAG"
+
+          BASE_VERSION=${BASE_TAG#v}
+          IFS=. read MAJOR MINOR PATCH <<< "$BASE_VERSION"
+
+          PATCH=$((PATCH + 1))
+          TS=$(date +%Y%m%d%H%M%S)
+          PRE_RELEASE_VERSION="$MAJOR.$MINOR.$PATCH-pre.$TS"
+
+          echo "Calculated pre-release version: v$PRE_RELEASE_VERSION"
+          echo "version=$PRE_RELEASE_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Tag the latest commit on 'main'
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          SHA=$(git rev-parse origin/main)
+          echo "Tagging commit $SHA on main with v${{ steps.calculate_version.outputs.version }}"
+
+          git tag "v${{ steps.calculate_version.outputs.version }}" $SHA
+          git push origin "v${{ steps.calculate_version.outputs.version }}"
+
+  build-and-publish:
+    name: Build, Test & Create GitHub Pre-release
+    needs: calculate-and-tag
     runs-on: ubuntu-latest
     permissions:
       contents: write
 
     steps:
-      - name: Checkout code
+      - name: Checkout code at the newly created pre-release tag
         uses: actions/checkout@v4
         with:
+          ref: 'refs/tags/v${{ needs.calculate-and-tag.outputs.version }}'
           fetch-depth: 0
-
-      - name: Determine trigger type
-        id: trigger
-        run: |
-          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            echo "by_tag=true"  >> $GITHUB_OUTPUT
-          else
-            echo "by_tag=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Calculate prerelease version
-        run: |
-          # pick the base tag
-          if [ "${{ steps.trigger.outputs.by_tag }}" = "true" ]; then
-            BASE_TAG="${{ github.ref_name }}"
-          else
-            BASE_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
-          fi
-
-          # strip leading 'v', then drop any '-' suffix (alpha, pre, rc, etc)
-          BASE=${BASE_TAG#v}
-          BASE=${BASE%%-*}       
-
-          # split into major.minor.patch
-          IFS=. read MAJOR MINOR PATCH <<<"$BASE"
-
-          # bump patch and append "-pre<TIMESTAMP>"
-          PATCH=$((PATCH + 1))
-          TS=$(date +%Y%m%d%H%M%S)
-          PRERELEASE_TAG="v${MAJOR}.${MINOR}.${PATCH}-pre${TS}"
-
-          echo "PRERELEASE_TAG=$PRERELEASE_TAG" >> $GITHUB_ENV
-
-      - name: Tag prerelease commit
-        run: |
-          git config --global user.name  "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-
-          # choose commit: either the tag commit or main HEAD
-          if [ "${{ steps.trigger.outputs.by_tag }}" = "true" ]; then
-            SHA="${{ github.sha }}"
-          else
-            git fetch origin main
-            SHA=$(git rev-parse origin/main)
-          fi
-
-          git tag "${{ env.PRERELEASE_TAG }}" $SHA
-          git push origin "${{ env.PRERELEASE_TAG }}"
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.13'
 
-      - name: Install build & test dependencies
+      - name: Install build and test dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install build pytest twine wheel setuptools-scm>=6.2
+          pip install build pytest wheel setuptools-scm>=6.2
 
       - name: Build package
-        run: python -m build --verbose
+        run: python -m build --sdist --wheel .
 
-      - name: Install package and Run tests
+      - name: Install package and run tests
         run: |
           pip install dist/*.whl
-          if pytest --maxfail=1 --disable-warnings --exitfirst --collect-only \
-             | grep -q "collected [1-9]"; then
-            pytest
-          else
-            echo "No tests found—skipping pytest."
-          fi
+          pytest
 
-      - name: Upload distribution artifact
-        uses: actions/upload-artifact@v4
-        if: success()
-        with:
-          name: lib-version-dist
-          path: dist/
-
-      - name: Create GitHub Pre-release
+      - name: Create GitHub Pre-release with Assets
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ env.PRERELEASE_TAG }}
-          name: Pre-release ${{ env.PRERELEASE_TAG }}
-          draft: false
+          tag_name: "v${{ needs.calculate-and-tag.outputs.version }}"
           prerelease: true
-          files: |
-            dist/*.whl
-            dist/*.tar.gz
+          files: dist/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
