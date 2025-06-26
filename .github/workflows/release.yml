@@ -44,3 +44,57 @@ jobs:
           files: dist/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  bump_version_on_main:
+    name: Bump Version on Main Branch
+    needs: build-and-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout main branch
+        uses: actions/checkout@v4
+        with:
+          ref: 'main'
+
+      - name: Configure Git for bot user
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Calculate next pre-release version
+        id: calculate_version
+        run: |
+          BASE_TAG=${{ github.ref_name }}
+          BASE_VERSION=${BASE_TAG#v}
+          IFS=. read -r MAJOR MINOR PATCH <<< "$BASE_VERSION"
+
+          NEXT_PATCH=$((PATCH + 1))
+          TIMESTAMP=$(date -u +%Y%m%d%H%M%S)
+          NEXT_VERSION_STRING="$MAJOR.$MINOR.$NEXT_PATCH-pre-$TIMESTAMP"
+
+          echo "NEXT_VERSION=$NEXT_VERSION_STRING" >> $GITHUB_ENV
+          echo "Bumping version on main to: $NEXT_VERSION_STRING"
+
+      - name: Update/Create version file on main
+        run: |
+          # This path correctly points to your _version.py inside the src directory
+          VERSION_FILE="src/lib_version/_version.py"
+          # Create the directory if it doesn't exist
+          mkdir -p $(dirname ${VERSION_FILE})
+          # Write the new version string to the file
+          echo "__version__ = \"${{ env.NEXT_VERSION }}\"" > ${VERSION_FILE}
+          echo "Updated content of ${VERSION_FILE}:"
+          cat ${VERSION_FILE}
+
+      - name: Commit and push new version to main
+        run: |
+          VERSION_FILE="src/lib_version/_version.py"
+          git add ${VERSION_FILE}
+          if git diff --staged --quiet; then
+            echo "No version change to commit."
+          else
+            git commit -m "chore: Bump version to ${{ env.NEXT_VERSION }} for next dev cycle"
+            git push origin main
+          fi
